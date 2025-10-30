@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import EvaluationRating from '../components/EvaluationRating';
 import PromptSection from '../components/PromptSection';
 
@@ -11,13 +11,26 @@ const TEST_CASES = [
   'Onboarding Workflow Question',
 ];
 
-const MODELS = ['GPT-4', 'Gemini Pro', 'Claude 3 Haiku'];
+const MODELS = ['GPT-5', 'GPT-4o', 'Claude 3 Haiku', 'Claude 3.5 Sonnet', 'Grok'];
 
 const INITIAL_GUIDELINES = {
-  role: 'You are an empathetic AI support specialist who can translate complex issues into clear actions.',
-  communicationGuideline: 'Always acknowledge the user sentiment, summarize the issue, and provide actionable next steps.',
-  contextClarificationGuideline: 'Knowledge Base: v2.4 update, includes troubleshooting guides for billing and integrations.',
-  handoverEscalationGuideline: 'Escalate to human support if the issue involves account security, billing disputes over $500, or technical problems persisting after 3 attempts.',
+  role: `You are a CopilotKit Technical Support Assistant. Your job is to help developers integrate CopilotKit with various stacks (React, FastAPI, LangGraph, Agno, etc.) by providing accurate, up-to-date, and architecture-aware guidance based on official documentation, known limitations, and current implementation constraints.
+You are not a general LLM—you must adhere strictly to CopilotKit’s actual capabilities, not speculate or invent workarounds that don’t exist.`,
+  communicationGuideline: `Be precise and explicit about what is and isn’t supported.
+  Never claim something is possible unless it’s confirmed in official docs or working examples.
+  If a feature requires a specific layer (e.g., CopilotKit Runtime), state it clearly as mandatory, not optional.
+  Avoid phrases like “you can expose GraphQL from FastAPI”—instead, explain how CopilotKit actually uses GraphQL (i.e., via its own runtime).
+  Distinguish between frontend, backend, and middleware responsibilities.
+  Use concrete terms: “CopilotKit Runtime (Node.js service)”, “AG-UI HTTP endpoint”, “GraphQL proxy”, etc.`,
+  contextClarificationGuideline: `If the user asks whether a stack (e.g., React + FastAPI) works without Next.js or extra services, first confirm:
+Are they using AG-UI agents (LangGraph, Agno, etc.)?
+Are they expecting direct frontend-to-agent communication?
+Do not assume they know about the CopilotKit Runtime.
+If the question implies bypassing the runtime, clarify that the runtime is required for all AG-UI integrations.
+Ask clarifying questions only if the intent is ambiguous (e.g., “Are you trying to avoid Node.js entirely, or just Next.js?”).
+But if the question is clear (e.g., “Can I skip the runtime?”), answer directly with the ground truth.
+`,
+  handoverEscalationGuideline: `Escalate to human support if the issue involves account security, billing disputes over $500, or technical problems persisting after 3 attempts.`,
 };
 
 export default function Page() {
@@ -39,39 +52,94 @@ export default function Page() {
   );
   const [agentResponse, setAgentResponse] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [latency, setLatency] = useState<number | null>(null);
+
+  const developerQuestionRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = developerQuestionRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [developerQuestion]);
 
   const generateResponse = async () => {
     if (!developerQuestion.trim()) return;
 
     setIsGenerating(true);
     try {
-      const systemContent = `Role: ${guidelines.role}
-
-Communication Guideline: ${guidelines.communicationGuideline}
-
-Context & Clarification Guideline: ${guidelines.contextClarificationGuideline}
-
-Handover & Escalation Guideline: ${guidelines.handoverEscalationGuideline}`;
-
       const requestBody = {
         messages: [
-          {
-            role: "system",
-            content: systemContent
-          },
           {
             role: "user",
             content: developerQuestion
           }
         ],
-        model: model.toLowerCase().replace(/\s+/g, '-'), // Convert "GPT-4" to "gpt-4", "Claude 3 Haiku" to "claude-3-haiku", etc.
-        thinking: { type: "enabled", budget_tokens: 10000 },
-        organisation_id: 13,
-        metadata: { source: "copilotkit codebase agent" }
+        model: model.toLowerCase().replace(/\s+/g, '-'), // Convert "GPT-5" to "gpt-5", "Claude 3 Haiku" to "claude-3-haiku", etc.
+        organisation_id: 23,
+        use_new_agent: true,
+        agent_config: {
+          name: "Nova",
+          description: guidelines.role,
+          guidances: [
+            {
+              type: "context",
+              enabled: true,
+              text: guidelines.contextClarificationGuideline
+            },
+            {
+              type: "communication",
+              enabled: true,
+              text: guidelines.communicationGuideline
+            },
+            {
+              type: "escalation",
+              enabled: true,
+              text: guidelines.handoverEscalationGuideline
+            }
+          ],
+          toolsConfig: [
+            {
+              name: "find_answer",
+              enabled: true,
+              internal: false,
+              arguments: {
+                ticketId: "TKTID",
+                organisationId: 23
+              }
+            },
+            {
+              name: "handover_and_escalate",
+              enabled: true,
+              internal: true,
+              arguments: {
+                channel_id: "C084C3HEBQS",
+                message: "",
+                type: "slack",
+                ticketId: "TKTID",
+                organisationId: 23
+              }
+            },
+            {
+              name: "close_ticket",
+              enabled: true,
+              internal: true,
+              arguments: {
+                status: "closed",
+                source: "Ticket Answer Agent",
+                ticketId: "TKTID",
+                organisationId: 23
+              }
+            }
+          ]
+        },
+        metadata: {
+          source: "sneha-evals-test"
+        }
       };
 
       console.log('📤 Sending request to lambda:', JSON.stringify(requestBody, null, 2));
 
+      const startTime = Date.now();
       const response = await fetch('/api/lambda-proxy', {
         method: 'POST',
         headers: {
@@ -79,6 +147,9 @@ Handover & Escalation Guideline: ${guidelines.handoverEscalationGuideline}`;
         },
         body: JSON.stringify(requestBody),
       });
+      const endTime = Date.now();
+      const elapsedTime = endTime - startTime;
+      setLatency(elapsedTime);
 
       console.log('📋 Response status:', response.status);
 
@@ -133,8 +204,8 @@ Handover & Escalation Guideline: ${guidelines.handoverEscalationGuideline}`;
       <main className="flex flex-1 min-h-0">
         <div className="flex h-full w-full flex-1 min-h-0 flex-col gap-4 px-4 pb-28 pt-4 md:pb-32">
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-10 md:gap-4">
-            <section className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-xl border border-slate-900 bg-slate-900/60 shadow-lg md:col-span-3">
-              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+            <section className="flex flex-col rounded-xl border border-slate-900 bg-slate-900/60 shadow-lg md:col-span-3">
+              <div className="space-y-4 p-4">
                 <div className="space-y-2">
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -220,20 +291,22 @@ Handover & Escalation Guideline: ${guidelines.handoverEscalationGuideline}`;
               </div>
             </section>
 
-            <section className="flex h-full min-h-[28rem] flex-col overflow-hidden rounded-xl border border-slate-900 bg-slate-900/60 shadow-lg md:col-span-4">
-              <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            <section className="flex flex-col rounded-xl border border-slate-900 bg-slate-900/60 shadow-lg md:col-span-4">
+              <div className="space-y-3 p-4">
                 <div className="space-y-2">
                   <h2 className="text-sm font-semibold text-slate-300">Developer Question</h2>
                   <textarea
+                    ref={developerQuestionRef}
+                    rows={1}
                     value={developerQuestion}
                     onChange={(event) => setDeveloperQuestion(event.target.value)}
-                    className="h-28 w-full resize-none rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm leading-relaxed text-slate-200 focus:border-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-600"
+                    className="w-full resize-none overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-sm leading-relaxed text-slate-200 focus:border-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-600"
                     placeholder="Enter your developer question here..."
                   />
                 </div>
                 <div className="space-y-2">
                   <h2 className="text-sm font-semibold text-slate-300">AI Agent Response</h2>
-                  <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-slate-900 bg-slate-950/70 p-3 text-sm leading-relaxed text-slate-200">
+                  <div className="rounded-lg border border-slate-900 bg-slate-950/70 p-3 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">
                     {agentResponse || 'Click "Generate Response" to get AI response...'}
                   </div>
                 </div>
@@ -313,7 +386,7 @@ Handover & Escalation Guideline: ${guidelines.handoverEscalationGuideline}`;
 
                 <div className="rounded-lg border border-slate-900 bg-slate-950/70 p-4 text-sm text-slate-200">
                   <span className="font-semibold text-slate-300">Latency: </span>
-                  1250 ms
+                  {latency !== null ? `${latency} ms` : 'Not measured'}
                 </div>
 
                 <div className="space-y-2">
