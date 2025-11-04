@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import EvaluationRating from '../components/EvaluationRating';
 import PromptSection from '../components/PromptSection';
 
@@ -53,6 +54,8 @@ export default function Page() {
   const [agentResponse, setAgentResponse] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
+  const [runId, setRunId] = useState(() => `run-${Date.now()}`);
+  const [isSaving, setIsSaving] = useState(false);
 
   const developerQuestionRef = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
@@ -182,6 +185,53 @@ export default function Page() {
       setIsGenerating(false);
     }
   };
+
+  const saveEvaluation = async () => {
+    if (!developerQuestion.trim() || !agentResponse.trim() || latency === null) {
+      alert('Please generate a response first!');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/record-eval', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: developerQuestion,
+          response: agentResponse,
+          latencyMs: latency,
+          runId: runId,
+          model: model,
+          role: guidelines.role,
+          communicationGuideline: guidelines.communicationGuideline,
+          contextClarificationGuideline: guidelines.contextClarificationGuideline,
+          handoverEscalationGuideline: guidelines.handoverEscalationGuideline,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.skipped) {
+          alert('⚠️ DynamoDB not configured - evaluation not saved');
+        } else {
+          alert('✅ Evaluation saved successfully!');
+          // Generate new runId for next evaluation
+          setRunId(`run-${Date.now()}`);
+        }
+      } else {
+        alert('❌ Failed to save evaluation');
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      alert('❌ Error saving evaluation');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const groundTruth =
     'Validate that the sandbox redirect URI is registered independently from production. Confirm that the OAuth app is requesting only the sandbox-supported scopes. If errors persist, rotate the sandbox client secret and review the provider logs using the returned request ID.';
 
@@ -194,9 +244,11 @@ export default function Page() {
           </h1>
           <button
             type="button"
-            className="rounded-md border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 shadow hover:border-slate-500 hover:text-white"
+            onClick={saveEvaluation}
+            disabled={isSaving || !agentResponse.trim()}
+            className="rounded-md border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 shadow hover:border-slate-500 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Save Evaluation
+            {isSaving ? 'Saving...' : 'Save Evaluation'}
           </button>
         </div>
       </header>
@@ -429,17 +481,19 @@ export default function Page() {
               </button>
             </div>
             <div className="flex flex-1 items-center justify-end gap-3">
-              <a
-                href="#"
+              <Link
+                href="/analytics"
                 className="text-sm font-medium text-slate-200 underline-offset-4 hover:underline"
               >
                 View Analytics
-              </a>
+              </Link>
               <button
                 type="button"
-                className="rounded-md bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 shadow hover:bg-white"
+                onClick={saveEvaluation}
+                disabled={isSaving || !agentResponse.trim()}
+                className="rounded-md bg-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 shadow hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Evaluation
+                {isSaving ? 'Saving...' : 'Save Evaluation'}
               </button>
             </div>
          </div>

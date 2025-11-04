@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { query, response, latencyMs, runId } = body ?? {};
+    const { query, response, latencyMs, runId, model, role, communicationGuideline, contextClarificationGuideline, handoverEscalationGuideline } = body ?? {};
 
     if (
       typeof query !== 'string' ||
@@ -22,7 +22,17 @@ export async function POST(req: Request) {
     const hasLocalEndpoint = Boolean(process.env.DYNAMO_ENDPOINT);
 
     if (hasAwsCreds || hasLocalEndpoint) {
-      await recordEvaluation({ query, response, latencyMs, runId });
+      await recordEvaluation({ 
+        query, 
+        response, 
+        latencyMs, 
+        runId,
+        model,
+        role,
+        communicationGuideline,
+        contextClarificationGuideline,
+        handoverEscalationGuideline,
+      });
       return NextResponse.json({ ok: true });
     } else {
       // Skip write when credentials/endpoint are not configured so the UI can proceed.
