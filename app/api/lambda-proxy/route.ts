@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 
-const LAMBDA_URL = "https://7uxm7jk4k3om3llfjjmcfgn6hi0uoovo.lambda-url.us-east-1.on.aws/";
-const API_KEY = "pEr1hFWdiKAUNKzVxxjmQjN2WYJVn3Vs";
+const LAMBDA_URL = process.env.LAMBDA_URL!;
+const ORCA_API_KEY = process.env.ORCA_API_KEY!;
+
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-orca-api-key": API_KEY,
+      "x-orca-api-key": ORCA_API_KEY,
     },
     body: JSON.stringify(body),
   });

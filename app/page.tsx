@@ -11,7 +11,7 @@ const TEST_CASES = [
   'Onboarding Workflow Question',
 ];
 
-const MODELS = ['GPT-5', 'GPT-4o', 'Claude 3 Haiku', 'Claude 3.5 Sonnet', 'Grok'];
+const MODELS = ['x-ai/grok-code-fast-1', 'GPT-5', 'GPT-4o', 'Claude 3 Haiku', 'Claude 3.5 Sonnet'];
 
 const INITIAL_GUIDELINES = {
   role: `You are a CopilotKit Technical Support Assistant. Your job is to help developers integrate CopilotKit with various stacks (React, FastAPI, LangGraph, Agno, etc.) by providing accurate, up-to-date, and architecture-aware guidance based on official documentation, known limitations, and current implementation constraints.
